@@ -153,6 +153,7 @@ begin
     begin
     Timeout.timeout(params.timeout) do
       if not allow_nonblock?
+        dlog("initsock_with_ssl_version: not allow_nonblock")
         self.sslsock.connect
       else
         begin
@@ -198,15 +199,12 @@ begin
 
     total_sent   = 0
     total_length = buf.length
-    block_size   = 16384
-    retry_time   = 0.5
+    block_size   = 102400
+    retry_time   = 0.01
 
     begin
       while( total_sent < total_length )
-        s = Rex::ThreadSafe.select( nil, [ self.sslsock ], nil, 0.25 )
-        if( s == nil || s[0] == nil )
-          next
-        end
+
         data = buf[total_sent, block_size]
         sent = sslsock.write_nonblock( data )
         if sent > 0
@@ -219,10 +217,9 @@ begin
 
     # Ruby 1.8.7 and 1.9.0/1.9.1 uses a standard Errno
     rescue ::Errno::EAGAIN, ::Errno::EWOULDBLOCK
-      # Sleep for a half a second, or until we can write again
-      Rex::ThreadSafe.select( nil, [ self.sslsock ], nil, retry_time )
+      Rex::ThreadSafe.select( nil, [ self.sslsock ], nil, 0.01 )
       # Decrement the block size to handle full sendQs better
-      block_size = 1024
+      block_size = [block_size/2,1024].max
       # Try to write the data again
       retry
 
@@ -255,7 +252,7 @@ begin
   #
   def read(length = nil, opts = {})
     if not allow_nonblock?
-      length = 16384 unless length
+      length = 102400 unless length
       begin
         return sslsock.sysread(length)
       rescue ::IOError, ::Errno::EPIPE, ::OpenSSL::SSL::SSLError
@@ -264,14 +261,10 @@ begin
       return
     end
 
-
+    block_size   = 102400
     begin
       while true
-        s = Rex::ThreadSafe.select( [ self.sslsock ], nil, nil, 0.10 )
-        if( s == nil || s[0] == nil )
-          next
-        end
-        return sslsock.read_nonblock( length )
+        return sslsock.read_nonblock( block_size )
       end
 
     rescue ::IOError, ::Errno::EPIPE
@@ -279,22 +272,21 @@ begin
 
     # Ruby 1.8.7 and 1.9.0/1.9.1 uses a standard Errno
     rescue ::Errno::EAGAIN, ::Errno::EWOULDBLOCK
-      # Sleep for a tenth a second, or until we can read again
-      Rex::ThreadSafe.select( [ self.sslsock ], nil, nil, 0.10 )
+      Rex::ThreadSafe.select( [ self.sslsock ], nil, nil, 0.01 )
       # Decrement the block size to handle full sendQs better
-      block_size = 1024
+      block_size = [block_size/2,1024].max
       # Try to write the data again
       retry
 
     # Ruby 1.9.2+ uses IO::WaitReadable/IO::WaitWritable
     rescue ::Exception => e
       if ::IO.const_defined?('WaitReadable') and e.kind_of?(::IO::WaitReadable)
-        IO::select( [ self.sslsock ], nil, nil, 0.5 )
+        IO::select( [ self.sslsock ], nil, nil, 0.01 )
         retry
       end
 
       if ::IO.const_defined?('WaitWritable') and e.kind_of?(::IO::WaitWritable)
-        IO::select( nil, [ self.sslsock ], nil, 0.5 )
+        IO::select( nil, [ self.sslsock ], nil, 0.01 )
         retry
       end
 
