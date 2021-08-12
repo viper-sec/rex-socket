@@ -263,10 +263,7 @@ begin
 
     block_size   = 102400
     begin
-      while true
-        return sslsock.read_nonblock( block_size )
-      end
-
+      return sslsock.read_nonblock( block_size )
     rescue ::IOError, ::Errno::EPIPE
       return nil
 
