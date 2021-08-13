@@ -200,7 +200,7 @@ begin
     total_sent   = 0
     total_length = buf.length
     block_size   = 102400
-    retry_time   = 0.01
+    retry_time   = 0.1
 
     begin
       while( total_sent < total_length )
@@ -217,7 +217,7 @@ begin
 
     # Ruby 1.8.7 and 1.9.0/1.9.1 uses a standard Errno
     rescue ::Errno::EAGAIN, ::Errno::EWOULDBLOCK
-      Rex::ThreadSafe.select( nil, [ self.sslsock ], nil, 0.01 )
+      Rex::ThreadSafe.select( nil, [ self.sslsock ], nil, retry_time )
       # Decrement the block size to handle full sendQs better
       block_size = [block_size/2,1024].max
       # Try to write the data again
@@ -262,6 +262,7 @@ begin
     end
 
     block_size   = 102400
+    retry_time   = 0.1
     begin
       return sslsock.read_nonblock( block_size )
     rescue ::IOError, ::Errno::EPIPE
@@ -269,7 +270,7 @@ begin
 
     # Ruby 1.8.7 and 1.9.0/1.9.1 uses a standard Errno
     rescue ::Errno::EAGAIN, ::Errno::EWOULDBLOCK
-      Rex::ThreadSafe.select( [ self.sslsock ], nil, nil, 0.01 )
+      Rex::ThreadSafe.select( [ self.sslsock ], nil, nil, retry_time )
       # Decrement the block size to handle full sendQs better
       block_size = [block_size/2,1024].max
       # Try to write the data again
@@ -278,12 +279,12 @@ begin
     # Ruby 1.9.2+ uses IO::WaitReadable/IO::WaitWritable
     rescue ::Exception => e
       if ::IO.const_defined?('WaitReadable') and e.kind_of?(::IO::WaitReadable)
-        IO::select( [ self.sslsock ], nil, nil, 0.01 )
+        IO::select( [ self.sslsock ], nil, nil, retry_time )
         retry
       end
 
       if ::IO.const_defined?('WaitWritable') and e.kind_of?(::IO::WaitWritable)
-        IO::select( nil, [ self.sslsock ], nil, 0.01 )
+        IO::select( nil, [ self.sslsock ], nil, retry_time )
         retry
       end
 
