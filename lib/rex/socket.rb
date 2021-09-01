@@ -636,6 +636,15 @@ module Socket
   # Note: Even though sub-threads are smashing the parent threads local, there
   #       is no concurrent use of the same locals and this is safe.
   def self.tcp_socket_pair
+    begin
+      if Rex::Compat.is_linux
+        lsock, rsock = ::Socket.pair(:UNIX, :STREAM, 0)
+        return [lsock, rsock]
+      end
+    rescue
+      ex = $!
+      elog("tcp_socket_pair failed: #{ex.class}: #{ex}", LogSource)
+    end
     lsock   = nil
     rsock   = nil
     laddr   = '127.0.0.1'
